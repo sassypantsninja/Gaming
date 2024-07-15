@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
+contract PixelsGame is Ownable {
+    using EnumerableSet for EnumerableSet.UintSet;
+
+    struct Pixel {
+        address owner;
+        uint8 color;
+    }
+
+    uint256 public constant WIDTH = 100; // Width of the canvas
+    uint256 public constant HEIGHT = 100; // Height of the canvas
+    mapping(uint256 => Pixel) public pixels;
+    mapping(address => EnumerableSet.UintSet) private ownerPixels;
+
+    event PixelDrawn(uint256 indexed x, uint256 indexed y, address indexed owner, uint8 color);
+    event PixelTransferred(uint256 indexed x, uint256 indexed y, address indexed from, address indexed to);
+
+    constructor() {}
+
+    function drawPixel(uint256 x, uint256 y, uint8 color) external {
+        require(x < WIDTH && y < HEIGHT, "PixelsGame: Coordinates out of bounds");
+
+        uint256 pixelId = _pixelId(x, y);
+        Pixel storage pixel = pixels[pixelId];
+
+        require(pixel.owner == address(0) || pixel.owner == msg.sender, "PixelsGame: Pixel already owned");
+
+        pixel.owner = msg.sender;
+        pixel.color = color;
+        ownerPixels[msg.sender].add(pixelId);
+
+        emit PixelDrawn(x, y, msg.sender, color);
+    }
+
+    function transferPixel(uint256 x, uint256 y, address to) external {
+        uint256 pixelId = _pixelId(x, y);
+        Pixel storage pixel = pixels[pixelId];
+
+        require(pixel.owner == msg.sender, "PixelsGame: Only owner can transfer the pixel");
+
+        ownerPixels[msg.sender].remove(pixelId);
+        ownerPixels[to].add(pixelId);
+        pixel.owner = to;
+
+        emit PixelTransferred(x, y, msg.sender, to);
+    }
+
+    function getPixel(uint256 x, uint256 y) external view returns (address owner, uint8 color) {
+        uint256 pixelId = _pixelId(x, y);
+        Pixel storage pixel = pixels[pixelId];
+        owner = pixel.owner;
+        color = pixel.color;
+    }
+
+    function getOwnedPixels(address owner) external view returns (uint256[] memory) {
+        EnumerableSet.UintSet storage pixelIds = ownerPixels[owner];
+        uint256[] memory result = new uint256[](pixelIds.length());
+
+        for (uint256 i = 0; i < pixelIds.length(); i++) {
+            result[i] = pixelIds.at(i);
+        }
+
+        return result;
+    }
+
+    function _pixelId(uint256 x, uint256 y) internal pure returns (uint256) {
+        return y * WIDTH + x;
+    }
+}
