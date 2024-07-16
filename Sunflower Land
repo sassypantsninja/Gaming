@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
+contract SunflowerLand is ERC721, Ownable {
+    using EnumerableSet for EnumerableSet.UintSet;
+
+    struct Land {
+        uint256 landId;
+        uint256[] crops;
+        uint256 lastHarvestTime;
+    }
+
+    struct Crop {
+        uint256 cropId;
+        string name;
+        uint256 growTime; // Time in seconds required to grow
+        uint256 reward; // Reward for harvesting
+    }
+
+    uint256 public nextLandId = 1;
+    uint256 public nextCropId = 1;
+
+    mapping(uint256 => Land) public lands;
+    mapping(uint256 => Crop) public crops;
+    mapping(address => EnumerableSet.UintSet) private ownerLands;
+
+    event LandMinted(address indexed owner, uint256 landId);
+    event CropPlanted(uint256 indexed landId, uint256 cropId);
+    event CropHarvested(uint256 indexed landId, uint256 cropId, uint256 reward);
+
+    constructor() ERC721("SunflowerLand", "SLND") {}
+
+    function mintLand() external onlyOwner {
+        uint256 landId = nextLandId++;
+        _safeMint(msg.sender, landId);
+        lands[landId] = Land(landId, new uint256[](0), block.timestamp);
+        ownerLands[msg.sender].add(landId);
+        emit LandMinted(msg.sender, landId);
+    }
+
+    function addCrop(string memory name, uint256 growTime, uint256 reward) external onlyOwner {
+        uint256 cropId = nextCropId++;
+        crops[cropId] = Crop(cropId, name, growTime, reward);
+    }
+
+    function plantCrop(uint256 landId, uint256 cropId) external {
+        require(ownerOf(landId) == msg.sender, "You do not own this land");
+        require(crops[cropId].cropId != 0, "Invalid crop");
+
+        Land storage land = lands[landId];
+        land.crops.push(cropId);
+        emit CropPlanted(landId, cropId);
+    }
+
+    function harvest(uint256 landId) external {
+        require(ownerOf(landId) == msg.sender, "You do not own this land");
+        Land storage land = lands[landId];
+
+        uint256 reward = 0;
+        uint256 currentTime = block.timestamp;
+
+        for (uint256 i = 0; i < land.crops.length; i++) {
+            uint256 cropId = land.crops[i];
+            Crop storage crop = crops[cropId];
+
+            if (currentTime >= land.lastHarvestTime + crop.growTime) {
+                reward += crop.reward;
+            }
+        }
+
+        land.crops = new uint256 ; // Clear crops after harvest
+        land.lastHarvestTime = currentTime;
+
+        payable(msg.sender).transfer(reward);
+        emit CropHarvested(landId, cropId, reward);
+    }
+
+    function getLandsByOwner(address owner) external view returns (uint256[] memory) {
+        EnumerableSet.UintSet storage landIds = ownerLands[owner];
+        uint256[] memory result = new uint256[](landIds.length());
+
+        for (uint256 i = 0; i < landIds.length(); i++) {
+            result[i] = landIds.at(i);
+        }
+
+        return result;
+    }
+
+    function getCropsByLand(uint256 landId) external view returns (uint256[] memory) {
+        require(_exists(landId), "Land does not exist");
+        Land storage land = lands[landId];
+        return land.crops;
+    }
+}
