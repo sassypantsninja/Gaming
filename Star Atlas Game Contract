@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./StarAtlasSpaceships.sol";
+import "./StarAtlasResources.sol";
+
+contract StarAtlasGame is Ownable {
+    StarAtlasSpaceships public spaceshipContract;
+    StarAtlasResources public resourceContract;
+
+    struct Trade {
+        address seller;
+        uint256 shipId;
+        uint256 price;
+    }
+
+    mapping(uint256 => Trade) public trades;
+
+    event ShipListed(uint256 indexed shipId, address indexed seller, uint256 price);
+    event ShipBought(uint256 indexed shipId, address indexed buyer, uint256 price);
+
+    constructor(address spaceshipAddress, address resourceAddress) {
+        spaceshipContract = StarAtlasSpaceships(spaceshipAddress);
+        resourceContract = StarAtlasResources(resourceAddress);
+    }
+
+    function listShip(uint256 shipId, uint256 price) external {
+        require(spaceshipContract.ownerOf(shipId) == msg.sender, "You do not own this ship");
+        require(trades[shipId].seller == address(0), "Ship is already listed");
+
+        spaceshipContract.transferFrom(msg.sender, address(this), shipId);
+        trades[shipId] = Trade(msg.sender, shipId, price);
+
+        emit ShipListed(shipId, msg.sender, price);
+    }
+
+    function buyShip(uint256 shipId) external {
+        Trade memory trade = trades[shipId];
+        require(trade.seller != address(0), "Ship is not for sale");
+
+        resourceContract.transferFrom(msg.sender, trade.seller, trade.price);
+        spaceshipContract.safeTransferFrom(address(this), msg.sender, shipId);
+
+        delete trades[shipId];
+
+        emit ShipBought(shipId, msg.sender, trade.price);
+    }
+}
