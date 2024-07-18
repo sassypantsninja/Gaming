@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./NineChroniclesCharacters.sol";
+import "./NineChroniclesResources.sol";
+
+contract NineChroniclesGame is Ownable {
+    NineChroniclesCharacters public characterContract;
+    NineChroniclesResources public resourceContract;
+
+    struct Trade {
+        address seller;
+        uint256 characterId;
+        uint256 price;
+    }
+
+    mapping(uint256 => Trade) public trades;
+
+    event CharacterListed(uint256 indexed characterId, address indexed seller, uint256 price);
+    event CharacterBought(uint256 indexed characterId, address indexed buyer, uint256 price);
+
+    constructor(address characterAddress, address resourceAddress) {
+        characterContract = NineChroniclesCharacters(characterAddress);
+        resourceContract = NineChroniclesResources(resourceAddress);
+    }
+
+    function listCharacter(uint256 characterId, uint256 price) external {
+        require(characterContract.ownerOf(characterId) == msg.sender, "You do not own this character");
+        require(trades[characterId].seller == address(0), "Character is already listed");
+
+        characterContract.transferFrom(msg.sender, address(this), characterId);
+        trades[characterId] = Trade(msg.sender, characterId, price);
+
+        emit CharacterListed(characterId, msg.sender, price);
+    }
+
+    function buyCharacter(uint256 characterId) external {
+        Trade memory trade = trades[characterId];
+        require(trade.seller != address(0), "Character is not for sale");
+
+        resourceContract.transferFrom(msg.sender, trade.seller, trade.price);
+        characterContract.safeTransferFrom(address(this), msg.sender, characterId);
+
+        delete trades[characterId];
+
+        emit CharacterBought(characterId, msg.sender, trade.price);
+    }
+}
