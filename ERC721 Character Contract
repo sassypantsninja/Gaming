@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract NineChroniclesCharacters is ERC721Enumerable, Ownable {
+    uint256 public nextCharacterId;
+    mapping(uint256 => string) private _characterNames;
+
+    constructor() ERC721("NineChroniclesCharacters", "NCC") {}
+
+    function mintCharacter(address to, string memory name) external onlyOwner {
+        uint256 characterId = nextCharacterId;
+        _safeMint(to, characterId);
+        _characterNames[characterId] = name;
+        nextCharacterId++;
+    }
+
+    function getCharacterName(uint256 characterId) external view returns (string memory) {
+        require(_exists(characterId), "NineChroniclesCharacters: Character does not exist");
+        return _characterNames[characterId];
+    }
+}
