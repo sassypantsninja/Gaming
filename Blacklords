@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract BlacklordsGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+    
+    struct Land {
+        uint256 level;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => Land) public lands;
+    uint256 public upgradeCost = 100 * 10 ** 18; // 100 tokens
+
+    event LandMinted(address owner, uint256 tokenId);
+    event LandUpgraded(address owner, uint256 tokenId, uint256 newLevel);
+
+    constructor(uint256 initialSupply) 
+        ERC20("BlacklordsToken", "BLT") 
+        ERC721("BlacklordsLand", "BLL") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintLand(address to) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        lands[newTokenId] = Land({level: 1, lastUpgradeTime: block.timestamp});
+        
+        emit LandMinted(to, newTokenId);
+    }
+
+    function upgradeLand(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this land");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        lands[tokenId].level += 1;
+        lands[tokenId].lastUpgradeTime = block.timestamp;
+
+        emit LandUpgraded(msg.sender, tokenId, lands[tokenId].level);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function getLandDetails(uint256 tokenId) public view returns (uint256 level, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Land does not exist");
+        Land memory land = lands[tokenId];
+        return (land.level, land.lastUpgradeTime);
+    }
+}
