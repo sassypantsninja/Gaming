@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract CosmicRoyaleGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    struct CosmicUnit {
+        string class;
+        uint256 level;
+        uint256 power;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => CosmicUnit) public cosmicUnits;
+    uint256 public upgradeCost = 100 * 10 ** 18; // 100 tokens
+    uint256 public upgradePowerIncrement = 10;
+
+    event UnitMinted(address owner, uint256 tokenId, string class);
+    event UnitUpgraded(address owner, uint256 tokenId, uint256 newLevel, uint256 newPower);
+
+    constructor(uint256 initialSupply) 
+        ERC20("CosmicToken", "CST") 
+        ERC721("CosmicUnit", "CU") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintUnit(address to, string memory class, uint256 initialPower) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        cosmicUnits[newTokenId] = CosmicUnit({
+            class: class,
+            level: 1,
+            power: initialPower,
+            lastUpgradeTime: block.timestamp
+        });
+        
+        emit UnitMinted(to, newTokenId, class);
+    }
+
+    function upgradeUnit(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this unit");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        cosmicUnits[tokenId].level += 1;
+        cosmicUnits[tokenId].power += upgradePowerIncrement;
+        cosmicUnits[tokenId].lastUpgradeTime = block.timestamp;
+
+        emit UnitUpgraded(msg.sender, tokenId, cosmicUnits[tokenId].level, cosmicUnits[tokenId].power);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function setUpgradePowerIncrement(uint256 newIncrement) public onlyOwner {
+        upgradePowerIncrement = newIncrement;
+    }
+
+    function getUnitDetails(uint256 tokenId) public view returns (string memory class, uint256 level, uint256 power, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Unit does not exist");
+        CosmicUnit memory unit = cosmicUnits[tokenId];
+        return (unit.class, unit.level, unit.power, unit.lastUpgradeTime);
+    }
+}
