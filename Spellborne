@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract SpellborneGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    struct Spellcaster {
+        string name;
+        string classType;
+        uint256 level;
+        uint256 mana;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => Spellcaster) public spellcasters;
+    uint256 public upgradeCost = 100 * 10 ** 18; // 100 tokens
+    uint256 public manaPerUpgrade = 50;
+
+    event SpellcasterMinted(address owner, uint256 tokenId, string name, string classType);
+    event SpellcasterUpgraded(address owner, uint256 tokenId, uint256 newLevel, uint256 newMana);
+
+    constructor(uint256 initialSupply) 
+        ERC20("SpellToken", "SPT") 
+        ERC721("SpellcasterNFT", "SPN") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintSpellcaster(address to, string memory name, string memory classType) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        spellcasters[newTokenId] = Spellcaster({
+            name: name,
+            classType: classType,
+            level: 1,
+            mana: 100, // initial mana
+            lastUpgradeTime: block.timestamp
+        });
+        
+        emit SpellcasterMinted(to, newTokenId, name, classType);
+    }
+
+    function upgradeSpellcaster(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this spellcaster");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        spellcasters[tokenId].level += 1;
+        spellcasters[tokenId].mana += manaPerUpgrade;
+        spellcasters[tokenId].lastUpgradeTime = block.timestamp;
+
+        emit SpellcasterUpgraded(msg.sender, tokenId, spellcasters[tokenId].level, spellcasters[tokenId].mana);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function setManaPerUpgrade(uint256 newMana) public onlyOwner {
+        manaPerUpgrade = newMana;
+    }
+
+    function getSpellcasterDetails(uint256 tokenId) public view returns (string memory name, string memory classType, uint256 level, uint256 mana, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Spellcaster does not exist");
+        Spellcaster memory spellcaster = spellcasters[tokenId];
+        return (spellcaster.name, spellcaster.classType, spellcaster.level, spellcaster.mana, spellcaster.lastUpgradeTime);
+    }
+}
