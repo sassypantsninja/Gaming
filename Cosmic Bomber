@@ -1,0 +1,80 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract CosmicBomberGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    struct Spaceship {
+        string name;
+        uint256 attackPower;
+        uint256 defense;
+        uint256 level;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => Spaceship) public spaceships;
+    uint256 public upgradeCost = 100 * 10 ** 18; // 100 tokens
+    uint256 public attackPowerPerUpgrade = 10;
+    uint256 public defensePerUpgrade = 5;
+
+    event SpaceshipMinted(address owner, uint256 tokenId, string name);
+    event SpaceshipUpgraded(address owner, uint256 tokenId, uint256 newLevel, uint256 newAttackPower, uint256 newDefense);
+
+    constructor(uint256 initialSupply) 
+        ERC20("CosmicToken", "CMB") 
+        ERC721("SpaceshipNFT", "SSN") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintSpaceship(address to, string memory name) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        spaceships[newTokenId] = Spaceship({
+            name: name,
+            attackPower: 100, // initial attack power
+            defense: 50, // initial defense
+            level: 1,
+            lastUpgradeTime: block.timestamp
+        });
+        
+        emit SpaceshipMinted(to, newTokenId, name);
+    }
+
+    function upgradeSpaceship(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this spaceship");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        Spaceship storage spaceship = spaceships[tokenId];
+        spaceship.level += 1;
+        spaceship.attackPower += attackPowerPerUpgrade;
+        spaceship.defense += defensePerUpgrade;
+        spaceship.lastUpgradeTime = block.timestamp;
+
+        emit SpaceshipUpgraded(msg.sender, tokenId, spaceship.level, spaceship.attackPower, spaceship.defense);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function setUpgradeIncrements(uint256 newAttackPower, uint256 newDefense) public onlyOwner {
+        attackPowerPerUpgrade = newAttackPower;
+        defensePerUpgrade = newDefense;
+    }
+
+    function getSpaceshipDetails(uint256 tokenId) public view returns (string memory name, uint256 attackPower, uint256 defense, uint256 level, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Spaceship does not exist");
+        Spaceship memory spaceship = spaceships[tokenId];
+        return (spaceship.name, spaceship.attackPower, spaceship.defense, spaceship.level, spaceship.lastUpgradeTime);
+    }
+}
