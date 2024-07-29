@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract MoodyMadnessGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    struct Character {
+        string name;
+        string mood;
+        uint256 level;
+        uint256 experience;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => Character) public characters;
+    uint256 public upgradeCost = 50 * 10 ** 18; // 50 tokens
+    uint256 public experiencePerUpgrade = 20;
+
+    event CharacterMinted(address owner, uint256 tokenId, string name, string mood);
+    event CharacterUpgraded(address owner, uint256 tokenId, uint256 newLevel, uint256 newExperience);
+
+    constructor(uint256 initialSupply) 
+        ERC20("MoodyToken", "MTK") 
+        ERC721("MoodyCharacter", "MOC") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintCharacter(address to, string memory name, string memory mood) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        characters[newTokenId] = Character({
+            name: name,
+            mood: mood,
+            level: 1,
+            experience: 0,
+            lastUpgradeTime: block.timestamp
+        });
+        
+        emit CharacterMinted(to, newTokenId, name, mood);
+    }
+
+    function upgradeCharacter(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this character");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        characters[tokenId].level += 1;
+        characters[tokenId].experience += experiencePerUpgrade;
+        characters[tokenId].lastUpgradeTime = block.timestamp;
+
+        emit CharacterUpgraded(msg.sender, tokenId, characters[tokenId].level, characters[tokenId].experience);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function setExperiencePerUpgrade(uint256 newExperience) public onlyOwner {
+        experiencePerUpgrade = newExperience;
+    }
+
+    function getCharacterDetails(uint256 tokenId) public view returns (string memory name, string memory mood, uint256 level, uint256 experience, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Character does not exist");
+        Character memory character = characters[tokenId];
+        return (character.name, character.mood, character.level, character.experience, character.lastUpgradeTime);
+    }
+}
