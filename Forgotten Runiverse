@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract ForgottenRuniverseGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    struct Item {
+        string name;
+        string itemType;
+        uint256 level;
+        uint256 power;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => Item) public items;
+    uint256 public upgradeCost = 100 * 10 ** 18; // 100 tokens
+    uint256 public powerPerUpgrade = 10;
+
+    event ItemMinted(address owner, uint256 tokenId, string name, string itemType);
+    event ItemUpgraded(address owner, uint256 tokenId, uint256 newLevel, uint256 newPower);
+
+    constructor(uint256 initialSupply) 
+        ERC20("RuniverseToken", "RNT") 
+        ERC721("RuniverseItem", "RNI") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintItem(address to, string memory name, string memory itemType) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        items[newTokenId] = Item({
+            name: name,
+            itemType: itemType,
+            level: 1,
+            power: 100, // initial power
+            lastUpgradeTime: block.timestamp
+        });
+        
+        emit ItemMinted(to, newTokenId, name, itemType);
+    }
+
+    function upgradeItem(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this item");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        items[tokenId].level += 1;
+        items[tokenId].power += powerPerUpgrade;
+        items[tokenId].lastUpgradeTime = block.timestamp;
+
+        emit ItemUpgraded(msg.sender, tokenId, items[tokenId].level, items[tokenId].power);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function setPowerPerUpgrade(uint256 newPower) public onlyOwner {
+        powerPerUpgrade = newPower;
+    }
+
+    function getItemDetails(uint256 tokenId) public view returns (string memory name, string memory itemType, uint256 level, uint256 power, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Item does not exist");
+        Item memory item = items[tokenId];
+        return (item.name, item.itemType, item.level, item.power, item.lastUpgradeTime);
+    }
+}
