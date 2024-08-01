@@ -1,0 +1,118 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract FightLeagueGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    struct Fighter {
+        string name;
+        uint256 level;
+        uint256 attackPower;
+        uint256 defense;
+        uint256 health;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => Fighter) public fighters;
+    uint256 public upgradeCost = 50 * 10 ** 18; // 50 tokens
+    uint256 public rewardAmount = 20 * 10 ** 18; // 20 tokens
+    uint256 public healthIncrement = 10;
+    uint256 public attackIncrement = 5;
+    uint256 public defenseIncrement = 3;
+
+    event FighterMinted(address owner, uint256 tokenId, string name);
+    event FighterUpgraded(address owner, uint256 tokenId, uint256 newLevel, uint256 newAttackPower, uint256 newDefense, uint256 newHealth);
+    event BattleResult(address winner, address loser, uint256 rewardAmount);
+
+    constructor(uint256 initialSupply) 
+        ERC20("FightToken", "FTK") 
+        ERC721("FighterNFT", "FTR") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintFighter(address to, string memory name) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        fighters[newTokenId] = Fighter({
+            name: name,
+            level: 1,
+            attackPower: 100, // initial attack power
+            defense: 50, // initial defense
+            health: 100, // initial health
+            lastUpgradeTime: block.timestamp
+        });
+        
+        emit FighterMinted(to, newTokenId, name);
+    }
+
+    function upgradeFighter(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this fighter");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        Fighter storage fighter = fighters[tokenId];
+        fighter.level += 1;
+        fighter.attackPower += attackIncrement;
+        fighter.defense += defenseIncrement;
+        fighter.health += healthIncrement;
+        fighter.lastUpgradeTime = block.timestamp;
+
+        emit FighterUpgraded(msg.sender, tokenId, fighter.level, fighter.attackPower, fighter.defense, fighter.health);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function setRewardAmount(uint256 newReward) public onlyOwner {
+        rewardAmount = newReward;
+    }
+
+    function setUpgradeIncrements(uint256 newHealthIncrement, uint256 newAttackIncrement, uint256 newDefenseIncrement) public onlyOwner {
+        healthIncrement = newHealthIncrement;
+        attackIncrement = newAttackIncrement;
+        defenseIncrement = newDefenseIncrement;
+    }
+
+    function getFighterDetails(uint256 tokenId) public view returns (string memory name, uint256 level, uint256 attackPower, uint256 defense, uint256 health, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Fighter does not exist");
+        Fighter memory fighter = fighters[tokenId];
+        return (fighter.name, fighter.level, fighter.attackPower, fighter.defense, fighter.health, fighter.lastUpgradeTime);
+    }
+
+    function battle(uint256 fighter1Id, uint256 fighter2Id) public {
+        require(ownerOf(fighter1Id) == msg.sender, "You do not own fighter1");
+        require(ownerOf(fighter2Id) != msg.sender, "You cannot battle your own fighter");
+        require(_exists(fighter1Id) && _exists(fighter2Id), "Both fighters must exist");
+
+        Fighter storage fighter1 = fighters[fighter1Id];
+        Fighter storage fighter2 = fighters[fighter2Id];
+
+        // Simple battle logic based on attack and defense
+        uint256 fighter1Power = fighter1.attackPower + fighter1.defense + fighter1.health;
+        uint256 fighter2Power = fighter2.attackPower + fighter2.defense + fighter2.health;
+
+        address winner;
+        address loser;
+
+        if (fighter1Power > fighter2Power) {
+            winner = ownerOf(fighter1Id);
+            loser = ownerOf(fighter2Id);
+        } else {
+            winner = ownerOf(fighter2Id);
+            loser = ownerOf(fighter1Id);
+        }
+
+        _mint(winner, rewardAmount);
+        emit BattleResult(winner, loser, rewardAmount);
+    }
+}
