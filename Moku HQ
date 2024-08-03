@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract MokuHQGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    struct Moku {
+        string name;
+        uint256 level;
+        uint256 attackPower;
+        uint256 defense;
+        uint256 health;
+        uint256 lastUpgradeTime;
+    }
+
+    mapping(uint256 => Moku) public mokus;
+    uint256 public upgradeCost = 50 * 10 ** 18; // 50 tokens
+    uint256 public attackPowerIncrement = 10;
+    uint256 public defenseIncrement = 5;
+    uint256 public healthIncrement = 20;
+
+    event MokuMinted(address owner, uint256 tokenId, string name);
+    event MokuUpgraded(address owner, uint256 tokenId, uint256 newLevel, uint256 newAttackPower, uint256 newDefense, uint256 newHealth);
+
+    constructor(uint256 initialSupply) 
+        ERC20("MokuToken", "MTK") 
+        ERC721("MokuCharacter", "MOC") 
+    {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mintMoku(address to, string memory name) public onlyOwner {
+        uint256 newTokenId = _tokenIds.current();
+        _tokenIds.increment();
+        
+        _mint(to, newTokenId);
+        mokus[newTokenId] = Moku({
+            name: name,
+            level: 1,
+            attackPower: 100, // initial attack power
+            defense: 50, // initial defense
+            health: 100, // initial health
+            lastUpgradeTime: block.timestamp
+        });
+        
+        emit MokuMinted(to, newTokenId, name);
+    }
+
+    function upgradeMoku(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "You do not own this Moku");
+        require(balanceOf(msg.sender) >= upgradeCost, "Insufficient tokens to upgrade");
+
+        _burn(msg.sender, upgradeCost);
+        Moku storage moku = mokus[tokenId];
+        moku.level += 1;
+        moku.attackPower += attackPowerIncrement;
+        moku.defense += defenseIncrement;
+        moku.health += healthIncrement;
+        moku.lastUpgradeTime = block.timestamp;
+
+        emit MokuUpgraded(msg.sender, tokenId, moku.level, moku.attackPower, moku.defense, moku.health);
+    }
+
+    function setUpgradeCost(uint256 newCost) public onlyOwner {
+        upgradeCost = newCost;
+    }
+
+    function setIncrements(uint256 newAttackPowerIncrement, uint256 newDefenseIncrement, uint256 newHealthIncrement) public onlyOwner {
+        attackPowerIncrement = newAttackPowerIncrement;
+        defenseIncrement = newDefenseIncrement;
+        healthIncrement = newHealthIncrement;
+    }
+
+    function getMokuDetails(uint256 tokenId) public view returns (string memory name, uint256 level, uint256 attackPower, uint256 defense, uint256 health, uint256 lastUpgradeTime) {
+        require(_exists(tokenId), "Moku does not exist");
+        Moku memory moku = mokus[tokenId];
+        return (moku.name, moku.level, moku.attackPower, moku.defense, moku.health, moku.lastUpgradeTime);
+    }
+}
