@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract SandboxGame is ERC20, ERC721, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _landIds;
+
+    struct Land {
+        uint256 id;
+        string name;
+        uint256 x;
+        uint256 y;
+        uint256 size;
+    }
+
+    mapping(uint256 => Land) public lands;
+
+    uint256 public landPrice = 1000 * 10 ** 18; // 1000 tokens
+
+    event LandPurchased(address indexed buyer, uint256 indexed landId);
+    event LandTransferred(address indexed from, address indexed to, uint256 indexed landId);
+
+    constructor() ERC20("SandboxToken", "SAND") ERC721("SandboxLand", "LAND") {
+        _mint(msg.sender, 1000000 * 10 ** 18); // Initial supply of 1,000,000 tokens
+    }
+
+    function purchaseLand(string memory name, uint256 x, uint256 y, uint256 size) external {
+        require(balanceOf(msg.sender) >= landPrice, "Insufficient tokens to purchase land");
+        _burn(msg.sender, landPrice);
+
+        uint256 newLandId = _landIds.current();
+        _landIds.increment();
+
+        _mint(msg.sender, newLandId);
+
+        lands[newLandId] = Land({
+            id: newLandId,
+            name: name,
+            x: x,
+            y: y,
+            size: size
+        });
+
+        emit LandPurchased(msg.sender, newLandId);
+    }
+
+    function transferLand(address to, uint256 landId) external {
+        require(ownerOf(landId) == msg.sender, "You do not own this land");
+        _transfer(msg.sender, to, landId);
+        emit LandTransferred(msg.sender, to, landId);
+    }
+
+    function getLandDetails(uint256 landId) external view returns (Land memory) {
+        return lands[landId];
+    }
+
+    function setLandPrice(uint256 newPrice) external onlyOwner {
+        landPrice = newPrice;
+    }
+}
