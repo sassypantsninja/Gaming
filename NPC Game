@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract NPCGame is Ownable {
+    ERC20 public gameToken;
+
+    struct NPC {
+        string name;
+        uint256 strength;
+        uint256 agility;
+        uint256 intelligence;
+        bool exists;
+    }
+
+    struct Player {
+        uint256 experience;
+        uint256 level;
+    }
+
+    mapping(uint256 => NPC) public npcs;
+    mapping(address => Player) public players;
+    uint256 public npcCount;
+
+    event NPCInteracted(uint256 npcId, address indexed player, uint256 reward);
+    event PlayerLeveledUp(address indexed player, uint256 newLevel);
+
+    constructor(address tokenAddress) {
+        gameToken = ERC20(tokenAddress);
+    }
+
+    function createNPC(string memory name, uint256 strength, uint256 agility, uint256 intelligence) external onlyOwner {
+        npcCount++;
+        npcs[npcCount] = NPC(name, strength, agility, intelligence, true);
+    }
+
+    function interactWithNPC(uint256 npcId) external {
+        require(npcs[npcId].exists, "NPC does not exist");
+
+        uint256 reward = calculateReward(npcId, msg.sender);
+        players[msg.sender].experience += reward;
+
+        if (players[msg.sender].experience >= experienceToLevelUp(players[msg.sender].level)) {
+            players[msg.sender].level++;
+            emit PlayerLeveledUp(msg.sender, players[msg.sender].level);
+        }
+
+        gameToken.transfer(msg.sender, reward);
+
+        emit NPCInteracted(npcId, msg.sender, reward);
+    }
+
+    function calculateReward(uint256 npcId, address player) internal view returns (uint256) {
+        NPC memory npc = npcs[npcId];
+        Player memory playerStats = players[player];
+
+        uint256 reward = (npc.strength + npc.agility + npc.intelligence) * (playerStats.level + 1);
+        return reward * 10**18; // Reward is in the smallest denomination of the token (e.g., wei if it's ETH)
+    }
+
+    function experienceToLevelUp(uint256 level) public pure returns (uint256) {
+        return (level + 1) * 1000; // Simple experience curve: 1000 experience per level
+    }
+
+    function getNPCDetails(uint256 npcId) external view returns (string memory, uint256, uint256, uint256) {
+        NPC memory npc = npcs[npcId];
+        require(npc.exists, "NPC does not exist");
+        return (npc.name, npc.strength, npc.agility, npc.intelligence);
+    }
+
+    function getPlayerDetails(address player) external view returns (uint256, uint256) {
+        Player memory playerStats = players[player];
+        return (playerStats.experience, playerStats.level);
+    }
+
+    function depositGameTokens(uint256 amount) external onlyOwner {
+        gameToken.transferFrom(msg.sender, address(this), amount);
+    }
+
+    function withdrawGameTokens(uint256 amount) external onlyOwner {
+        gameToken.transfer(msg.sender, amount);
+    }
+}
