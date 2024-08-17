@@ -1,0 +1,115 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract RuniverseToken is ERC20, Ownable {
+    constructor(uint256 initialSupply) ERC20("RuniverseToken", "RNV") {
+        _mint(msg.sender, initialSupply);
+    }
+
+    function mint(address to, uint256 amount) external onlyOwner {
+        _mint(to, amount);
+    }
+
+    function burn(address from, uint256 amount) external onlyOwner {
+        _burn(from, amount);
+    }
+}
+
+contract RuniverseGame is Ownable {
+    RuniverseToken public runiverseToken;
+
+    struct Character {
+        string name;
+        uint256 level;
+        uint256 experience;
+        uint256 strength;
+        uint256 agility;
+        uint256 intelligence;
+    }
+
+    struct Quest {
+        string name;
+        uint256 difficulty;
+        uint256 reward;
+    }
+
+    mapping(address => Character) public characters;
+    mapping(uint256 => Quest) public quests;
+    uint256 public questCount;
+
+    event CharacterCreated(address indexed player, string name);
+    event QuestCompleted(address indexed player, uint256 questId, uint256 reward);
+    event LevelUp(address indexed player, uint256 newLevel);
+
+    constructor(address tokenAddress) {
+        runiverseToken = RuniverseToken(tokenAddress);
+    }
+
+    function createCharacter(string memory name) external {
+        require(bytes(characters[msg.sender].name).length == 0, "Character already exists");
+
+        characters[msg.sender] = Character({
+            name: name,
+            level: 1,
+            experience: 0,
+            strength: 10,
+            agility: 10,
+            intelligence: 10
+        });
+
+        emit CharacterCreated(msg.sender, name);
+    }
+
+    function createQuest(string memory name, uint256 difficulty, uint256 reward) external onlyOwner {
+        questCount++;
+        quests[questCount] = Quest({
+            name: name,
+            difficulty: difficulty,
+            reward: reward
+        });
+    }
+
+    function completeQuest(uint256 questId) external {
+        require(bytes(characters[msg.sender].name).length != 0, "Character does not exist");
+        require(questId > 0 && questId <= questCount, "Invalid quest ID");
+
+        Quest memory quest = quests[questId];
+        Character storage character = characters[msg.sender];
+
+        // Simplified quest completion logic: reward based on quest difficulty and character attributes
+        require(character.strength + character.agility + character.intelligence >= quest.difficulty, "Character is too weak");
+
+        character.experience += quest.reward;
+        runiverseToken.transfer(msg.sender, quest.reward * 10**18);
+
+        if (character.experience >= experienceToLevelUp(character.level)) {
+            character.level++;
+            emit LevelUp(msg.sender, character.level);
+        }
+
+        emit QuestCompleted(msg.sender, questId, quest.reward);
+    }
+
+    function experienceToLevelUp(uint256 level) public pure returns (uint256) {
+        return (level + 1) * 1000;
+    }
+
+    function getCharacter(address player) external view returns (Character memory) {
+        return characters[player];
+    }
+
+    function getQuest(uint256 questId) external view returns (Quest memory) {
+        return quests[questId];
+    }
+
+    function depositTokens(uint256 amount) external onlyOwner {
+        runiverseToken.transferFrom(msg.sender, address(this), amount);
+    }
+
+    function withdrawTokens(uint256 amount) external onlyOwner {
+        runiverseToken.transfer(msg.sender, amount);
+    }
+}
