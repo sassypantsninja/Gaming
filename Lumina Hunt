@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract LuminaHunt is Ownable {
+    struct Hunt {
+        uint256 id;
+        string description;    // Description of the hunt (e.g., clues or tasks)
+        uint256 entryFee;      // Fee to enter the hunt
+        uint256 rewardPool;    // Total reward for the hunt
+        bool isActive;         // Status of the hunt (active or ended)
+        address winner;        // Address of the winner
+        address[] participants; // List of participants
+    }
+
+    uint256 public huntCount; // Tracks the total number of hunts
+    mapping(uint256 => Hunt) public hunts; // Mapping of huntId to Hunt struct
+
+    ERC20 public rewardToken; // Token used for rewards (e.g., LuminaToken)
+    
+    event HuntCreated(uint256 id, string description, uint256 entryFee);
+    event PlayerJoined(uint256 huntId, address player);
+    event HuntEnded(uint256 id, address winner, uint256 rewardAmount);
+    
+    constructor(address _rewardToken) {
+        rewardToken = ERC20(_rewardToken); // Set the token used for rewards
+    }
+
+    // Owner can create a new hunt (game session)
+    function createHunt(string memory _description, uint256 _entryFee) external onlyOwner {
+        hunts[huntCount] = Hunt({
+            id: huntCount,
+            description: _description,
+            entryFee: _entryFee,
+            rewardPool: 0,
+            isActive: true,
+            winner: address(0),
+            participants: new address 
+        });
+        emit HuntCreated(huntCount, _description, _entryFee);
+        huntCount++;
+    }
+
+    // Players can join a hunt by paying the entry fee
+    function joinHunt(uint256 _huntId) external {
+        Hunt storage hunt = hunts[_huntId];
+        require(hunt.isActive, "Hunt is not active");
+        require(rewardToken.transferFrom(msg.sender, address(this), hunt.entryFee), "Entry fee transfer failed");
+
+        // Add player to participants list
+        hunt.participants.push(msg.sender);
+        // Add the entry fee to the reward pool
+        hunt.rewardPool += hunt.entryFee;
+
+        emit PlayerJoined(_huntId, msg.sender);
+    }
+
+    // Owner can end the hunt and declare a winner (could be skill-based or random)
+    function endHunt(uint256 _huntId, address _winner) external onlyOwner {
+        Hunt storage hunt = hunts[_huntId];
+        require(hunt.isActive, "Hunt is not active");
+        require(hunt.participants.length > 0, "No participants in this hunt");
+
+        hunt.isActive = false;
+        hunt.winner = _winner;
+
+        // Transfer the reward to the winner
+        rewardToken.transfer(hunt.winner, hunt.rewardPool);
+
+        emit HuntEnded(_huntId, hunt.winner, hunt.rewardPool);
+    }
+
+    // View details of a specific hunt
+    function getHuntDetails(uint256 _huntId) external view returns (Hunt memory) {
+        return hunts[_huntId];
+    }
+
+    // Get list of participants in a hunt
+    function getHuntParticipants(uint256 _huntId) external view returns (address[] memory) {
+        return hunts[_huntId].participants;
+    }
+
+    // Withdraw excess tokens (in case of any leftover funds)
+    function withdrawTokens(uint256 _amount) external onlyOwner {
+        rewardToken.transfer(msg.sender, _amount);
+    }
+}
